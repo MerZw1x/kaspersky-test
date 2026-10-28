@@ -1,12 +1,31 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
+)
+
+// Допустимые значения log.format.
+const (
+	LogFormatJSON    = "json"
+	LogFormatConsole = "console"
+)
+
+// Значения по умолчанию — безопасные для прода: если ключ забыли указать
+// в YAML, сервис всё равно стартует с таймаутами и без debug-логов.
+const (
+	defaultLogLevel          = "info"
+	defaultListen            = ":8000"
+	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 10 * time.Second
+	defaultWriteTimeout      = 10 * time.Second
+	defaultIdleTimeout       = 60 * time.Second
+	defaultGracefulTimeout   = 10 * time.Second
 )
 
 type LogConfig struct {
@@ -34,14 +53,14 @@ func ReadConfig(paths ...string) (*Config, error) {
 	for _, path := range paths {
 		yamlFile, err := os.ReadFile(path) //nolint:gosec // путь из CLI-флага --config
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read file %s: %w", path, err)
 		}
 
 		expandedData := os.ExpandEnv(string(yamlFile)) // resolve envs, e.g. field: ${ENV_NAME}
 
 		err = yaml.Unmarshal([]byte(expandedData), &config)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse file %s: %w", path, err)
 		}
 	}
 
@@ -53,52 +72,56 @@ func ReadConfig(paths ...string) (*Config, error) {
 }
 
 func (cfg Config) validate() error {
-	if cfg.GracefulTimeout == 0 {
-		return fmt.Errorf("graceful_timeout must be > 0")
-	}
-	if cfg.HTTPServer.ReadHeaderTimeout == 0 {
-		return fmt.Errorf("read_header_timeout must be > 0")
-	}
-	if cfg.HTTPServer.ReadTimeout == 0 {
-		return fmt.Errorf("read_timeout must be > 0")
+	var errs []error
+
+	if cfg.GracefulTimeout <= 0 {
+		errs = append(errs, errors.New("graceful_timeout must be > 0"))
 	}
 
-	if cfg.HTTPServer.WriteTimeout == 0 {
-		return fmt.Errorf("write_timeout must be > 0")
+	if cfg.HTTPServer.ReadHeaderTimeout <= 0 {
+		errs = append(errs, errors.New("http_server.read_header_timeout must be > 0"))
 	}
 
-	if cfg.HTTPServer.IdleTimeout == 0 {
-		return fmt.Errorf("idle_timeout must be > 0")
+	if cfg.HTTPServer.ReadTimeout <= 0 {
+		errs = append(errs, errors.New("http_server.read_timeout must be > 0"))
+	}
+
+	if cfg.HTTPServer.WriteTimeout <= 0 {
+		errs = append(errs, errors.New("http_server.write_timeout must be > 0"))
+	}
+
+	if cfg.HTTPServer.IdleTimeout <= 0 {
+		errs = append(errs, errors.New("http_server.idle_timeout must be > 0"))
 	}
 
 	if cfg.HTTPServer.Listen == "" {
-		return fmt.Errorf("http server port must not be empty")
+		errs = append(errs, errors.New("http_server.listen must not be empty"))
 	}
 
 	if _, err := zapcore.ParseLevel(cfg.Log.Level); err != nil {
-		return fmt.Errorf("invalid log level: %w", err)
+		errs = append(errs, fmt.Errorf("invalid log level: %w", err))
 	}
 
-	if cfg.Log.Format != "json" && cfg.Log.Format != "console" {
-		return fmt.Errorf("log format must be json or console")
+	if cfg.Log.Format != LogFormatJSON && cfg.Log.Format != LogFormatConsole {
+		errs = append(errs, errors.New("log format must be json or console"))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func defaultConfig() Config {
 	return Config{
 		Log: LogConfig{
-			Level:  "debug",
-			Format: "console",
+			Level:  defaultLogLevel,
+			Format: LogFormatJSON,
 		},
 		HTTPServer: HTTPServerConfig{
-			Listen:            ":8000",
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       10 * time.Second,
-			IdleTimeout:       60 * time.Second,
-			WriteTimeout:      10 * time.Second,
+			Listen:            defaultListen,
+			ReadHeaderTimeout: defaultReadHeaderTimeout,
+			ReadTimeout:       defaultReadTimeout,
+			WriteTimeout:      defaultWriteTimeout,
+			IdleTimeout:       defaultIdleTimeout,
 		},
-		GracefulTimeout: 10 * time.Second,
+		GracefulTimeout: defaultGracefulTimeout,
 	}
 }

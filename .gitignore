@@ -1,0 +1,11 @@
+# Артефакты сборки и тестов
+bin/
+coverage/
+
+# Локальные секреты
+.env
+
+# IDE и ОС
+.idea/
+.vscode/
+.DS_Store
