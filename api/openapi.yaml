@@ -1,8 +1,16 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   title: Information Exchange Service
-  description: API для обмена информацией об угрозах. 
-  version: 1.0.0
+  description: |
+    API для обмена информацией об угрозах.
+
+    Угроза идентифицируется MD5-хешем файла. Регистр MD5 не важен: сервис
+    приводит хеш к нижнему регистру, поэтому `ABC…` и `abc…` — одна и та же запись.
+  version: 1.1.0
+
+servers:
+  - url: http://localhost:8000
+    description: Локальный запуск
 
 paths:
   /info/{md5}:
@@ -11,14 +19,7 @@ paths:
       description: Возвращает полную информацию об угрозе для указанного MD5-хеша.
       operationId: getInfoByMd5
       parameters:
-        - name: md5
-          in: path
-          required: true
-          description: MD5-хеш файла (32 символа, шестнадцатеричные цифры)
-          schema:
-            type: string
-            pattern: '^[a-fA-F0-9]{32}$'
-            example: "d41d8cd98f00b204e9800998ecf8427e"
+        - $ref: '#/components/parameters/MD5Path'
       responses:
         '200':
           description: Успешный ответ с информацией об угрозе
@@ -26,38 +27,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ThreatResponse'
-        '404':
-          description: Угроза с указанным MD5 не найден
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '400':
-          description: Некорректный формат MD5
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
     put:
       summary: Обновить информацию об угрозе по MD5
-      description: Заменяет информацию о существующей угрозе
+      description: |
+        Полностью заменяет информацию о существующей угрозе.
+
+        Поля, не переданные в запросе, не сохраняют старые значения:
+        опциональные поля очищаются, а `type`, `platform`, `severity`, `status`
+        и `tags` получают значения по умолчанию. MD5 изменить нельзя — он задаётся
+        только в пути, передача `md5` в теле запроса — ошибка 400.
+        `created_at` сохраняется, `updated_at` обновляется.
       operationId: updateThreat
       parameters:
-        - name: md5
-          in: path
-          required: true
-          description: MD5-хеш обновляемой записи
-          schema:
-            type: string
-            pattern: '^[a-fA-F0-9]{32}$'
-            example: "d41d8cd98f00b204e9800998ecf8427e"
+        - $ref: '#/components/parameters/MD5Path'
       requestBody:
         required: true
         content:
@@ -72,28 +61,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ThreatResponse'
         '400':
-          description: Некорректные данные запроса или MD5
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
         '404':
-          description: Угроза с указанным MD5 не найден
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
         '500':
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
   /info:
     post:
       summary: Создать новую запись об угрозе
-      description: Добавляет новую информацию об угрозе. MD5 должен быть уникальным.
+      description: |
+        Добавляет новую информацию об угрозе. MD5 должен быть уникальным;
+        уникальность проверяется после приведения хеша к нижнему регистру.
       operationId: createThreat
       requestBody:
         required: true
@@ -109,63 +88,314 @@ paths:
               schema:
                 $ref: '#/components/schemas/ThreatResponse'
         '400':
-          description: Некорректные данные запроса (например, невалидный MD5)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
         '409':
-          description: Угроза с таким MD5 уже существует
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Conflict'
         '500':
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
 components:
+  parameters:
+    MD5Path:
+      name: md5
+      in: path
+      required: true
+      description: MD5-хеш файла (32 шестнадцатеричных символа, регистр не важен)
+      schema:
+        $ref: '#/components/schemas/MD5'
+
+  responses:
+    BadRequest:
+      description: Некорректный MD5 или тело запроса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Bad Request
+            details: 'request body has an error: property "severity": value is not one of the allowed values'
+    NotFound:
+      description: Угроза с указанным MD5 не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Threat not found
+            details: No threat with MD5 d41d8cd98f00b204e9800998ecf8427e found
+    Conflict:
+      description: Угроза с таким MD5 уже существует
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Threat already exists
+            details: Threat with MD5 d41d8cd98f00b204e9800998ecf8427e already exists
+    InternalError:
+      description: Внутренняя ошибка сервера. Детали не раскрываются, они пишутся в лог сервиса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Internal server error
+
   schemas:
+    # --- Хеши ---
+
+    MD5:
+      type: string
+      description: MD5-хеш файла (32 шестнадцатеричных символа). В ответах всегда в нижнем регистре.
+      pattern: '^[a-fA-F0-9]{32}$'
+      example: d41d8cd98f00b204e9800998ecf8427e
+
+    SHA256:
+      type: string
+      description: |
+        SHA-256 того же файла (64 шестнадцатеричных символа). Для MD5 известны
+        коллизии, SHA-256 позволяет однозначно подтвердить, что речь о том же файле.
+      pattern: '^[a-fA-F0-9]{64}$'
+      example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+    # --- Поля угрозы ---
+
+    ThreatName:
+      type: string
+      description: |
+        Название угрозы по нотации Kaspersky:
+        `[Префикс:]Поведение[-Подтип].Платформа.Семейство[.Вариант]`.
+        Префиксы: `HEUR`, `UDS`, `PDM`, `VHO`, `not-a-virus` (не более двух).
+      minLength: 1
+      maxLength: 255
+      pattern: '^(?:(?:HEUR|UDS|PDM|VHO|not-a-virus):){0,2}[A-Z][A-Za-z]*(?:-[A-Za-z]+)*\.[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$'
+      example: HEUR:Trojan-Ransom.Win32.Generic
+
+    ThreatType:
+      type: string
+      description: |
+        Категория угрозы по поведению. `unknown` — угроза ещё не классифицирована.
+      enum:
+        - trojan
+        - virus
+        - worm
+        - ransomware
+        - backdoor
+        - spyware
+        - adware
+        - riskware
+        - exploit
+        - unknown
+      default: unknown
+      example: ransomware
+
+    Platform:
+      type: string
+      description: Платформа, на которой угроза актуальна. `multi` — кроссплатформенная.
+      enum:
+        - windows
+        - linux
+        - macos
+        - android
+        - ios
+        - multi
+        - unknown
+      default: unknown
+      example: windows
+
+    Severity:
+      type: string
+      description: Уровень опасности — определяет приоритет реагирования.
+      enum:
+        - low
+        - medium
+        - high
+        - critical
+        - unknown
+      default: unknown
+      example: high
+
+    ThreatStatus:
+      type: string
+      description: |
+        Статус вердикта. `active` — действующий детект; `false_positive` — признан
+        ложным срабатыванием; `revoked` — отозван (например, устарел).
+      enum:
+        - active
+        - false_positive
+        - revoked
+      default: active
+      example: active
+
+    FileSize:
+      type: integer
+      format: int64
+      minimum: 0
+      description: Размер файла в байтах. Помогает дополнительно убедиться, что хеш относится к тому же файлу.
+      example: 482304
+
+    Description:
+      type: string
+      maxLength: 2000
+      description: Описание поведения угрозы в свободной форме.
+      example: Шифрует пользовательские файлы и требует выкуп в криптовалюте.
+
+    Tag:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: '^[a-z0-9][a-z0-9_-]*$'
+      description: Метка для группировки и поиска (нижний регистр, цифры, `-`, `_`).
+      example: apt
+
+    Tags:
+      type: array
+      items:
+        $ref: '#/components/schemas/Tag'
+      maxItems: 20
+      uniqueItems: true
+      default: []
+      description: Набор уникальных меток, не более 20.
+      example: [apt, phishing]
+
+    FirstSeen:
+      type: string
+      format: date-time
+      description: |
+        Когда угроза была замечена впервые (RFC 3339). Не может быть в будущем
+        и не может быть позже `last_seen` — правило проверяется сервисом.
+      example: '2026-09-01T08:30:00Z'
+
+    LastSeen:
+      type: string
+      format: date-time
+      description: |
+        Когда угроза была замечена в последний раз (RFC 3339). Не может быть
+        в будущем и не может быть раньше `first_seen` — правило проверяется сервисом.
+      example: '2026-10-20T17:45:00Z'
+
+    # Без readOnly: схема используется только в ответах, а с readOnly
+    # oapi-codegen делает обязательные поля указателями.
+    Timestamp:
+      type: string
+      format: date-time
+      description: Момент времени, выставляется сервисом (RFC 3339, UTC).
+      example: '2026-10-28T12:00:00Z'
+
+    # --- Запросы и ответы ---
+
     ThreatCreateRequest:
       type: object
+      description: |
+        Новая угроза. Обязательны только `md5` и `name`, остальные поля
+        опциональны — клиенты исходной версии API продолжают работать.
+      additionalProperties: false
       required:
         - md5
         - name
       properties:
         md5:
-          type: string
-          pattern: '^[a-fA-F0-9]{32}$'
-          description: MD5-хеш файла (32 шестнадцатеричных символа)
-          example: "d41d8cd98f00b204e9800998ecf8427e"
+          $ref: '#/components/schemas/MD5'
         name:
-          type: string
-          description: Название угрозы
-          example: "Trojan.Win32.Generic"
+          $ref: '#/components/schemas/ThreatName'
+        type:
+          $ref: '#/components/schemas/ThreatType'
+        platform:
+          $ref: '#/components/schemas/Platform'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/ThreatStatus'
+        sha256:
+          $ref: '#/components/schemas/SHA256'
+        file_size:
+          $ref: '#/components/schemas/FileSize'
+        description:
+          $ref: '#/components/schemas/Description'
+        tags:
+          $ref: '#/components/schemas/Tags'
+        first_seen:
+          $ref: '#/components/schemas/FirstSeen'
+        last_seen:
+          $ref: '#/components/schemas/LastSeen'
+
     ThreatUpdateRequest:
       type: object
+      description: |
+        Новое полное состояние угрозы (см. описание PUT). Поля `md5` здесь нет:
+        он задаётся в пути.
+      additionalProperties: false
       required:
         - name
       properties:
         name:
-          type: string
-          description: Название угрозы
-          example: "Trojan.Win32.Generic"
-        
+          $ref: '#/components/schemas/ThreatName'
+        type:
+          $ref: '#/components/schemas/ThreatType'
+        platform:
+          $ref: '#/components/schemas/Platform'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/ThreatStatus'
+        sha256:
+          $ref: '#/components/schemas/SHA256'
+        file_size:
+          $ref: '#/components/schemas/FileSize'
+        description:
+          $ref: '#/components/schemas/Description'
+        tags:
+          $ref: '#/components/schemas/Tags'
+        first_seen:
+          $ref: '#/components/schemas/FirstSeen'
+        last_seen:
+          $ref: '#/components/schemas/LastSeen'
+
     ThreatResponse:
       type: object
+      description: |
+        Полная информация об угрозе. Опциональные поля без значения
+        (`sha256`, `file_size`, `description`, `first_seen`, `last_seen`)
+        в ответ не включаются.
+      required:
+        - md5
+        - name
+        - type
+        - platform
+        - severity
+        - status
+        - tags
+        - created_at
+        - updated_at
       properties:
         md5:
-          type: string
-          pattern: '^[a-fA-F0-9]{32}$'
-          description: MD5-хеш
-          example: "d41d8cd98f00b204e9800998ecf8427e"
+          $ref: '#/components/schemas/MD5'
         name:
-          type: string
-          description: Название угрозы
-          example: "Trojan.Win32.Generic"
+          $ref: '#/components/schemas/ThreatName'
+        type:
+          $ref: '#/components/schemas/ThreatType'
+        platform:
+          $ref: '#/components/schemas/Platform'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/ThreatStatus'
+        sha256:
+          $ref: '#/components/schemas/SHA256'
+        file_size:
+          $ref: '#/components/schemas/FileSize'
+        description:
+          $ref: '#/components/schemas/Description'
+        tags:
+          $ref: '#/components/schemas/Tags'
+        first_seen:
+          $ref: '#/components/schemas/FirstSeen'
+        last_seen:
+          $ref: '#/components/schemas/LastSeen'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
 
     ErrorResponse:
       type: object
