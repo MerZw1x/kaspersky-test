@@ -1,9 +1,10 @@
 package v1
 
 import (
-	"backend/internal/api"
 	"context"
 	"errors"
+
+	"backend/internal/api"
 )
 
 var _ api.StrictServerInterface = (*TreatHandler)(nil)
@@ -15,14 +16,14 @@ func NewTreatHandler() *TreatHandler {
 	return &TreatHandler{}
 }
 
-func (th *TreatHandler) CreateThreat(ctx context.Context, request api.CreateThreatRequestObject) (api.CreateThreatResponseObject, error) {
+func (th *TreatHandler) CreateThreat(_ context.Context, _ api.CreateThreatRequestObject) (api.CreateThreatResponseObject, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (th *TreatHandler) GetInfoByMd5(ctx context.Context, request api.GetInfoByMd5RequestObject) (api.GetInfoByMd5ResponseObject, error) {
+func (th *TreatHandler) GetInfoByMd5(_ context.Context, _ api.GetInfoByMd5RequestObject) (api.GetInfoByMd5ResponseObject, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (th *TreatHandler) UpdateThreat(ctx context.Context, request api.UpdateThreatRequestObject) (api.UpdateThreatResponseObject, error) {
+func (th *TreatHandler) UpdateThreat(_ context.Context, _ api.UpdateThreatRequestObject) (api.UpdateThreatResponseObject, error) {
 	return nil, errors.New("not implemented")
 }

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"backend/internal/api"
 	"fmt"
 	"net/http"
 
@@ -9,6 +8,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	echomiddleware "github.com/oapi-codegen/echo-middleware"
 	"go.uber.org/zap"
+
+	"backend/internal/api"
 )
 
 const healthProbePath = "/health"
@@ -88,5 +89,6 @@ func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface) (*echo.E
 	api.RegisterHandlers(e, api.NewStrictHandler(strict, nil))
 
 	e.GET(healthProbePath, health)
+
 	return e, nil
 }

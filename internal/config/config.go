@@ -42,6 +42,7 @@ type HTTPServerConfig struct {
 }
 
 type Config struct {
+	Database        DatabaseConfig   `yaml:"database"`
 	Log             LogConfig        `yaml:"log"`
 	HTTPServer      HTTPServerConfig `yaml:"http_server"`
 	GracefulTimeout time.Duration    `yaml:"graceful_timeout"`
@@ -106,11 +107,12 @@ func (cfg Config) validate() error {
 		errs = append(errs, errors.New("log format must be json or console"))
 	}
 
-	return errors.Join(errs...)
+	return errors.Join(append(errs, cfg.Database.validate())...)
 }
 
 func defaultConfig() Config {
 	return Config{
+		Database: defaultDatabaseConfig(),
 		Log: LogConfig{
 			Level:  defaultLogLevel,
 			Format: LogFormatJSON,

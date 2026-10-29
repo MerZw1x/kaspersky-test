@@ -42,6 +42,7 @@ func New(configPaths ...string) (*App, error) {
 	}
 
 	threatHandler := v1.NewTreatHandler()
+
 	e, err := handlers.NewRouter(lg, threatHandler)
 	if err != nil {
 		return nil, fmt.Errorf("create router: %w", err)
@@ -54,10 +55,17 @@ func New(configPaths ...string) (*App, error) {
 	e.Server.WriteTimeout = cfg.HTTPServer.WriteTimeout
 	e.Server.IdleTimeout = cfg.HTTPServer.IdleTimeout
 
+	db, err := initDB(cfg.Database)
+	if err != nil {
+		_ = lg.Sync()
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
+
 	return &App{
-		cfg:    cfg,
-		logger: lg,
-		e:      e,
+		cfg:     cfg,
+		logger:  lg,
+		e:       e,
+		closers: []io.Closer{db},
 	}, nil
 }
 

@@ -1,12 +1,13 @@
 package handlers
 
 import (
-	"backend/internal/api"
 	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
+
+	"backend/internal/api"
 )
 
 const internalErrorMessage = "Internal server error"
