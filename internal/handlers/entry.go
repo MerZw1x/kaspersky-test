@@ -1,30 +1,17 @@
 package handlers
 
 import (
+	"backend/internal/api"
 	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	echomiddleware "github.com/oapi-codegen/echo-middleware"
 	"go.uber.org/zap"
 )
 
 const healthProbePath = "/health"
-
-// Register подключает middleware и маршруты к echo.
-//
-// Порядок middleware важен: RequestID ставится первым, чтобы id попал в лог,
-// а Recover — последним, чтобы паника в хендлере превратилась в 500
-// до того, как логгер запишет статус ответа.
-func Register(e *echo.Echo, lg *zap.SugaredLogger) {
-	e.Use(
-		middleware.RequestID(),
-		requestLogger(lg),
-		recoverPanics(),
-	)
-
-	e.GET(healthProbePath, health)
-}
 
 // health — проба живости для healthcheck в docker-compose.
 func health(c echo.Context) error {
@@ -68,4 +55,38 @@ func requestLogger(lg *zap.SugaredLogger) echo.MiddlewareFunc {
 			return nil
 		},
 	})
+}
+
+func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface) (*echo.Echo, error) {
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	e.HTTPErrorHandler = NewErrorHandler(lg)
+	e.Pre(middleware.RemoveTrailingSlash())
+
+	e.Use(
+		middleware.RequestID(),
+		requestLogger(lg),
+		recoverPanics(),
+		middleware.BodyLimit("64K"),
+	)
+
+	spec, err := api.GetSwagger()
+	if err != nil {
+		return nil, fmt.Errorf("get swagger: %w", err)
+	}
+
+	// Чтобы не вылетала ошибка при обращении к 127.0.0.1:8000 или по имени докер контейнера
+	spec.Servers = nil
+
+	e.Use(echomiddleware.OapiRequestValidatorWithOptions(spec, &echomiddleware.Options{
+		Skipper: func(c echo.Context) bool {
+			return c.Path() == healthProbePath
+		},
+	}))
+
+	api.RegisterHandlers(e, api.NewStrictHandler(strict, nil))
+
+	e.GET(healthProbePath, health)
+	return e, nil
 }

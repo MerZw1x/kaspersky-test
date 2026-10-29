@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"backend/internal/api"
 	"errors"
 	"net/http"
 
@@ -9,13 +10,6 @@ import (
 )
 
 const internalErrorMessage = "Internal server error"
-
-// ErrorResponse — тело ответа с ошибкой (components/schemas/ErrorResponse в спеке).
-// Временный тип: на этапе кодогенерации заменится сгенерированным.
-type ErrorResponse struct {
-	Message string `json:"message"`
-	Details string `json:"details,omitempty"`
-}
 
 // NewErrorHandler возвращает централизованный обработчик ошибок echo.
 // Через него проходит любая ошибка: из хендлеров, middleware и роутера (404, 405).
@@ -50,17 +44,19 @@ func NewErrorHandler(lg *zap.SugaredLogger) echo.HTTPErrorHandler {
 	}
 }
 
-func toErrorResponse(err error) (int, ErrorResponse) {
+func toErrorResponse(err error) (int, api.ErrorResponse) {
 	var he *echo.HTTPError
 	if !errors.As(err, &he) || he.Code >= http.StatusInternalServerError {
-		return http.StatusInternalServerError, ErrorResponse{Message: internalErrorMessage}
+		msg := internalErrorMessage
+		return http.StatusInternalServerError, api.ErrorResponse{Message: &msg}
 	}
 
-	resp := ErrorResponse{Message: http.StatusText(he.Code)}
+	msg := http.StatusText(he.Code)
+	resp := api.ErrorResponse{Message: &msg}
 
 	// Дефолтные ошибки echo дублируют StatusText в Message — такие детали не нужны.
-	if msg, ok := he.Message.(string); ok && msg != resp.Message {
-		resp.Details = msg
+	if m, ok := he.Message.(string); ok && msg != m {
+		resp.Details = &m
 	}
 
 	return he.Code, resp

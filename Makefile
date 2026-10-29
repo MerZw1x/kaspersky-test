@@ -3,7 +3,7 @@ BUILD_DIR        := ./bin
 CONFIG           ?= ./config/local/config.yaml
 GOLANGCI_VERSION := v2.11.4
 
-.PHONY: all build run-local clean install-lint fmt lint test-unit test-coverage
+.PHONY: all build run-local clean install-lint fmt lint test-unit test-coverage generate check-generate
 
 all: lint test-unit build
 
@@ -41,3 +41,10 @@ test-coverage:
 	go tool cover -func=coverage/unit.out | tail -1
 	go tool cover -html=coverage/unit.out -o coverage/unit.html
 	@echo "HTML report: coverage/unit.html"
+
+generate:
+	go generate ./...
+
+check-generate:
+	make generate
+	git diff --exit-code internal/api

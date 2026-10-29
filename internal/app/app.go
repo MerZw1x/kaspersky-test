@@ -13,11 +13,11 @@ import (
 	"syscall"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 
 	"backend/internal/config"
 	"backend/internal/handlers"
+	v1 "backend/internal/handlers/v1"
 	"backend/pkg/logger"
 )
 
@@ -41,11 +41,11 @@ func New(configPaths ...string) (*App, error) {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
 
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-	e.HTTPErrorHandler = handlers.NewErrorHandler(lg)
-	e.Pre(middleware.RemoveTrailingSlash())
+	threatHandler := v1.NewTreatHandler()
+	e, err := handlers.NewRouter(lg, threatHandler)
+	if err != nil {
+		return nil, fmt.Errorf("create router: %w", err)
+	}
 
 	// echo сам создаёт http.Server и при Start не трогает таймауты,
 	// поэтому выставляем их заранее.
@@ -53,8 +53,6 @@ func New(configPaths ...string) (*App, error) {
 	e.Server.ReadTimeout = cfg.HTTPServer.ReadTimeout
 	e.Server.WriteTimeout = cfg.HTTPServer.WriteTimeout
 	e.Server.IdleTimeout = cfg.HTTPServer.IdleTimeout
-
-	handlers.Register(e, lg)
 
 	return &App{
 		cfg:    cfg,

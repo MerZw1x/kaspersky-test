@@ -1,0 +1,7 @@
+package: api
+output: api.gen.go  # относительно internal/api: go generate запускается из папки с generate.go
+generate:
+  echo-server: true      
+  strict-server: true    
+  models: true          
+  embedded-spec: true
