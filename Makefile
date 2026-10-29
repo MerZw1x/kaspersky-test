@@ -47,9 +47,20 @@ generate:
 	go generate ./...
 
 check-generate:
-	make generate
-	git diff --exit-code internal/api
+	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
+	go -C tools/oapi-codegen tool oapi-codegen -config ../../api/oapi-codegen.yaml -o "$$tmp" ../../api/openapi.yaml && \
+	cmp internal/api/api.gen.go "$$tmp" || { echo "Generated code is out of date: run make generate"; exit 1; }
 
 .PHONY: test-integration
 test-integration:
 	go test -race -count=1 -tags=integration -timeout=3m ./internal/repository/postgres/...
+
+.PHONY: up down logs
+up:
+	docker compose up --build --wait --wait-timeout 120
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f app

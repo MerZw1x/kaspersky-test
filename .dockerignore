@@ -1,0 +1,14 @@
+.git
+.agents
+.claude
+.codex
+.idea
+.vscode
+.DS_Store
+.env
+.env.*
+bin
+build
+coverage
+tools
+**/*_test.go

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/api"
+	errs "backend/internal/errors"
 )
 
 const internalErrorMessage = "Internal server error"
@@ -46,6 +47,21 @@ func NewErrorHandler(lg *zap.SugaredLogger) echo.HTTPErrorHandler {
 }
 
 func toErrorResponse(err error) (int, api.ErrorResponse) {
+	var code int
+
+	switch {
+	case errors.Is(err, errs.ErrValidation):
+		code = http.StatusBadRequest
+	case errors.Is(err, errs.ErrNotFound):
+		code = http.StatusNotFound
+	case errors.Is(err, errs.ErrAlreadyExists):
+		code = http.StatusConflict
+	}
+
+	if code != 0 {
+		return toErrorResponse(echo.NewHTTPError(code, err.Error()))
+	}
+
 	var he *echo.HTTPError
 	if !errors.As(err, &he) || he.Code >= http.StatusInternalServerError {
 		msg := internalErrorMessage

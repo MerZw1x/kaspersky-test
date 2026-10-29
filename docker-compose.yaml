@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: threatintel
+      POSTGRES_DB: threatintel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-threatintel-dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    stop_grace_period: 15s
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://threatintel@db:5432/threatintel?sslmode=disable
+      # pgx читает пароль из окружения: специальные символы не нужно встраивать в URL.
+      PGPASSWORD: ${POSTGRES_PASSWORD:-threatintel-dev}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+
+volumes:
+  postgres_data:

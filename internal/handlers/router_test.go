@@ -14,7 +14,6 @@ import (
 
 	"backend/internal/api"
 	"backend/internal/handlers"
-	v1 "backend/internal/handlers/v1"
 )
 
 const testMD5 = "d41d8cd98f00b204e9800998ecf8427e"
@@ -155,8 +154,4 @@ func TestRouterRecoversPanic(t *testing.T) {
 	rec = httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", http.NoBody))
 	require.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestThreatHandlerConstructor(t *testing.T) {
-	require.NotNil(t, v1.NewTreatHandler(), "constructor must return an initialized handler")
 }

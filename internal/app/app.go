@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -18,6 +19,8 @@ import (
 	"backend/internal/config"
 	"backend/internal/handlers"
 	v1 "backend/internal/handlers/v1"
+	"backend/internal/repository/postgres"
+	"backend/internal/service"
 	"backend/pkg/logger"
 )
 
@@ -41,10 +44,21 @@ func New(configPaths ...string) (*App, error) {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
 
-	threatHandler := v1.NewTreatHandler()
+	db, err := initDB(cfg.Database)
+	if err != nil {
+		_ = lg.Sync()
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
+
+	repo := postgres.NewThreatRepository(db)
+	threatService := service.NewThreatService(repo, time.Now)
+	threatHandler := v1.NewThreatHandler(threatService)
 
 	e, err := handlers.NewRouter(lg, threatHandler)
 	if err != nil {
+		_ = db.Close()
+		_ = lg.Sync()
+
 		return nil, fmt.Errorf("create router: %w", err)
 	}
 
@@ -54,12 +68,6 @@ func New(configPaths ...string) (*App, error) {
 	e.Server.ReadTimeout = cfg.HTTPServer.ReadTimeout
 	e.Server.WriteTimeout = cfg.HTTPServer.WriteTimeout
 	e.Server.IdleTimeout = cfg.HTTPServer.IdleTimeout
-
-	db, err := initDB(cfg.Database)
-	if err != nil {
-		_ = lg.Sync()
-		return nil, fmt.Errorf("initialize database: %w", err)
-	}
 
 	return &App{
 		cfg:     cfg,
