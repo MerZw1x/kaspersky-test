@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/api"
+	"backend/internal/config"
 	"backend/internal/handlers"
 	v1 "backend/internal/handlers/v1"
 	"backend/internal/repository/postgres"
@@ -102,4 +103,66 @@ func TestHTTPPostgres(t *testing.T) {
 	require.NoError(t, db.Close())
 	failed := request(http.MethodGet, path, "", http.StatusInternalServerError)
 	require.JSONEq(t, `{"message":"Internal server error"}`, failed.Body.String())
+}
+
+func TestSecureHTTPPostgres(t *testing.T) {
+	db, _ := setupDB(t)
+	const reader = "integration-reader-secret-key"
+	const writer = "integration-writer-secret-key"
+	svc := service.NewThreatService(postgres.NewThreatRepository(db), time.Now)
+	settings := config.SecurityConfig{
+		Auth:      config.AuthConfig{Enabled: true, ReaderKey: reader, WriterKey: writer},
+		RateLimit: config.RateLimitConfig{Enabled: true, RequestsPerSecond: 100, Burst: 100, MaxClients: 100, IdleTTL: time.Minute},
+	}
+	router, err := handlers.NewRouter(zap.NewNop().Sugar(), v1.NewThreatHandler(svc), handlers.RouterOptions{Security: settings})
+	require.NoError(t, err)
+	spec, err := api.GetSwagger()
+	require.NoError(t, err)
+	spec.Servers = nil
+	specRouter, err := gorillamux.NewRouter(spec)
+	require.NoError(t, err)
+	request := func(method, path, body, key string, status int) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if key != "" {
+			req.Header.Set("X-API-Key", key)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, status, rec.Code, rec.Body.String())
+		require.NotContains(t, rec.Body.String(), reader)
+		require.NotContains(t, rec.Body.String(), writer)
+		if path != "/health" {
+			route, params, findErr := specRouter.FindRoute(req)
+			require.NoError(t, findErr)
+			validation := &openapi3filter.ResponseValidationInput{
+				RequestValidationInput: &openapi3filter.RequestValidationInput{Request: req, Route: route, PathParams: params},
+				Status:                 status, Header: rec.Header(), Options: &openapi3filter.Options{IncludeResponseStatus: true},
+			}
+			validation.SetBodyBytes(rec.Body.Bytes())
+			require.NoError(t, openapi3filter.ValidateResponse(context.Background(), validation))
+		}
+	}
+	key := strings.Repeat("ab", 16)
+	path := "/info/" + key
+	body := `{"md5":"` + key + `","name":"Trojan.Win32.Generic"}`
+	request("GET", "/health", "", "", 200)
+	request("GET", path, "", "", 401)
+	request("GET", path, "", "wrong-key", 401)
+	request("POST", "/info", body, reader, 403)
+	request("POST", "/info", body, writer, 201)
+	request("GET", path, "", reader, 200)
+	request("POST", "/info", body, writer, 409)
+	request("PUT", path, `{"name":"Backdoor.AndroidOS.Triada.a"}`, reader, 403)
+	request("PUT", path, `{"name":"Backdoor.AndroidOS.Triada.a"}`, writer, 200)
+	request("POST", "/info", strings.Repeat("x", 64*1024+1), writer, 413)
+	settings.RateLimit.Burst = 1
+	router, err = handlers.NewRouter(zap.NewNop().Sugar(), v1.NewThreatHandler(svc), handlers.RouterOptions{Security: settings, Now: func() time.Time { return time.Unix(0, 0) }})
+	require.NoError(t, err)
+	request("GET", path, "", reader, 200)
+	request("GET", path, "", reader, 429)
+	request("GET", "/health", "", "", 200)
 }

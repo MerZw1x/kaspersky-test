@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  # Локальный сервер указан намеренно; лицензия для тестового задания не выбрана.
+  no-server-example.com: off
+  info-license: off

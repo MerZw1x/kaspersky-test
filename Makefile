@@ -64,3 +64,21 @@ down:
 
 logs:
 	docker compose logs -f app
+
+.PHONY: certs up-tls
+certs:
+	@mkdir -p certs
+	@test ! -e certs/server.key && test ! -e certs/server.crt || { echo "Certificates already exist in certs/"; exit 1; }
+	openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 7 \
+		-subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+		-keyout certs/server.key -out certs/server.crt
+	@chmod 644 certs/server.key certs/server.crt
+
+up-tls:
+	docker compose -f docker-compose.yaml -f docker-compose.tls.yaml up --build --wait --wait-timeout 120
+
+.PHONY: lint-openapi verify
+lint-openapi:
+	npx -y @redocly/cli@1.34.5 lint api/openapi.yaml
+
+verify: all check-generate test-integration lint-openapi

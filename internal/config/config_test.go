@@ -40,6 +40,9 @@ func TestReadConfig_Valid(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, &config.Config{
+		Security: config.SecurityConfig{RateLimit: config.RateLimitConfig{
+			Enabled: true, RequestsPerSecond: 10, Burst: 20, MaxClients: 10000, IdleTTL: 10 * time.Minute,
+		}},
 		Database: config.DatabaseConfig{
 			DSN:          "postgres://threatintel:threatintel@localhost:5432/threatintel?sslmode=disable",
 			MaxOpenConns: 10, MaxIdleConns: 5, ConnMaxLifetime: 30 * time.Minute,

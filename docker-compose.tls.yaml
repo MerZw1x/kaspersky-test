@@ -1,0 +1,14 @@
+services:
+  app:
+    environment:
+      TLS_CERT_FILE: /certs/server.crt
+      TLS_KEY_FILE: /certs/server.key
+    volumes:
+      - ./certs:/certs:ro
+    healthcheck:
+      # Самоподписанный сертификат используется только для локальной демонстрации.
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -T 2 -O /dev/null https://127.0.0.1:8000/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 5

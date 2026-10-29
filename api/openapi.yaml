@@ -6,11 +6,14 @@ info:
 
     Угроза идентифицируется MD5-хешем файла. Регистр MD5 не важен: сервис
     приводит хеш к нижнему регистру, поэтому `ABC…` и `abc…` — одна и та же запись.
-  version: 1.1.0
+  version: 1.2.0
 
 servers:
   - url: http://localhost:8000
     description: Локальный запуск
+
+security:
+  - ApiKeyAuth: []
 
 paths:
   /info/{md5}:
@@ -31,6 +34,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -44,6 +51,7 @@ paths:
         и `tags` получают значения по умолчанию. MD5 изменить нельзя — он задаётся
         только в пути, передача `md5` в теле запроса — ошибка 400.
         `created_at` сохраняется, `updated_at` обновляется.
+        Для изменения требуется ключ роли writer, если авторизация включена.
       operationId: updateThreat
       parameters:
         - $ref: '#/components/parameters/MD5Path'
@@ -64,6 +72,14 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -73,6 +89,7 @@ paths:
       description: |
         Добавляет новую информацию об угрозе. MD5 должен быть уникальным;
         уникальность проверяется после приведения хеша к нижнему регистру.
+        Для создания требуется ключ роли writer, если авторизация включена.
       operationId: createThreat
       requestBody:
         required: true
@@ -91,10 +108,29 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalError'
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Ключ reader разрешает GET, writer — GET, POST и PUT.
+        Ключи задаются через READER_API_KEY и WRITER_API_KEY.
+        При security.auth.enabled=false проверка ключа отключена.
+        /health доступен без ключа и не ограничивается rate limit.
+
   parameters:
     MD5Path:
       name: md5
@@ -105,6 +141,48 @@ components:
         $ref: '#/components/schemas/MD5'
 
   responses:
+    Unauthorized:
+      description: API-ключ отсутствует или неверен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Unauthorized
+            details: missing or invalid API key
+    Forbidden:
+      description: Для создания и изменения требуется роль writer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Forbidden
+            details: writer role is required
+    TooManyRequests:
+      description: Превышен лимит запросов с одного IP или вместимость хранилища лимитера
+      headers:
+        Retry-After:
+          description: Рекомендуемая задержка перед повтором, в секундах
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Too Many Requests
+            details: request rate limit exceeded
+    BodyTooLarge:
+      description: Тело запроса превышает 64 КиБ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Request Entity Too Large
     BadRequest:
       description: Некорректный MD5 или тело запроса
       content:

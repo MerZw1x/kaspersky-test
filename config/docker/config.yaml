@@ -3,6 +3,9 @@ log:
   format: json
 
 http_server:
+  tls:
+    cert_file: "${TLS_CERT_FILE}"
+    key_file: "${TLS_KEY_FILE}"
   listen: :8000
   read_header_timeout: 5s
   read_timeout: 10s
@@ -18,3 +21,13 @@ database:
   conn_max_lifetime: 30m
   connect_timeout: 10s
   migration_timeout: 30s
+
+security:
+  auth:
+    enabled: ${AUTH_ENABLED}
+  rate_limit:
+    enabled: true
+    requests_per_second: ${RATE_LIMIT_RPS}
+    burst: ${RATE_LIMIT_BURST}
+    max_clients: 10000
+    idle_ttl: 10m

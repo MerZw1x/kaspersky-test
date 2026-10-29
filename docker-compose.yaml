@@ -22,6 +22,13 @@ services:
       # pgx читает пароль из окружения: специальные символы не нужно встраивать в URL.
       PGPASSWORD: ${POSTGRES_PASSWORD:-threatintel-dev}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      READER_API_KEY: ${READER_API_KEY:-local-reader-key-change-me}
+      WRITER_API_KEY: ${WRITER_API_KEY:-local-writer-key-change-me}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-20}
+      TLS_CERT_FILE: ""
+      TLS_KEY_FILE: ""
     ports:
       - "127.0.0.1:${HTTP_PORT:-8000}:8000"
     depends_on:

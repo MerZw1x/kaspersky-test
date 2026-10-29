@@ -1,15 +1,20 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	echomiddleware "github.com/oapi-codegen/echo-middleware"
 	"go.uber.org/zap"
 
 	"backend/internal/api"
+	"backend/internal/config"
+	security "backend/internal/handlers/middleware"
 )
 
 const healthProbePath = "/health"
@@ -58,8 +63,32 @@ func requestLogger(lg *zap.SugaredLogger) echo.MiddlewareFunc {
 	})
 }
 
-func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface) (*echo.Echo, error) {
+type RouterOptions struct {
+	Security config.SecurityConfig
+	Now      func() time.Time
+}
+
+func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface, options ...RouterOptions) (*echo.Echo, error) {
+	var opts RouterOptions
+
+	if len(options) > 1 {
+		return nil, errors.New("expected at most one RouterOptions")
+	}
+
+	if len(options) == 1 {
+		opts = options[0]
+	}
+
+	if err := opts.Security.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid router security config: %w", err)
+	}
+
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
+
 	e := echo.New()
+	e.IPExtractor = echo.ExtractIPDirect() // Не доверяем подменяемым X-Forwarded-For и X-Real-IP.
 	e.HideBanner = true
 	e.HidePort = true
 	e.HTTPErrorHandler = NewErrorHandler(lg)
@@ -69,6 +98,7 @@ func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface) (*echo.E
 		middleware.RequestID(),
 		requestLogger(lg),
 		recoverPanics(),
+		security.NewRateLimiter(opts.Security.RateLimit, opts.Now).Middleware,
 		middleware.BodyLimit("64K"),
 	)
 
@@ -81,6 +111,7 @@ func NewRouter(lg *zap.SugaredLogger, strict api.StrictServerInterface) (*echo.E
 	spec.Servers = nil
 
 	e.Use(echomiddleware.OapiRequestValidatorWithOptions(spec, &echomiddleware.Options{
+		Options: openapi3filter.Options{AuthenticationFunc: security.Authentication(opts.Security.Auth)},
 		Skipper: func(c echo.Context) bool {
 			return c.Path() == healthProbePath
 		},

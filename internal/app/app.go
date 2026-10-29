@@ -39,6 +39,11 @@ func New(configPaths ...string) (*App, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	tlsConfig, err := serverTLSConfig(cfg.HTTPServer.TLS)
+	if err != nil {
+		return nil, err
+	}
+
 	lg, err := logger.New(cfg.Log)
 	if err != nil {
 		return nil, fmt.Errorf("create logger: %w", err)
@@ -54,7 +59,7 @@ func New(configPaths ...string) (*App, error) {
 	threatService := service.NewThreatService(repo, time.Now)
 	threatHandler := v1.NewThreatHandler(threatService)
 
-	e, err := handlers.NewRouter(lg, threatHandler)
+	e, err := handlers.NewRouter(lg, threatHandler, handlers.RouterOptions{Security: cfg.Security})
 	if err != nil {
 		_ = db.Close()
 		_ = lg.Sync()
@@ -64,6 +69,8 @@ func New(configPaths ...string) (*App, error) {
 
 	// echo сам создаёт http.Server и при Start не трогает таймауты,
 	// поэтому выставляем их заранее.
+	e.Server.Addr = cfg.HTTPServer.Listen
+	e.Server.TLSConfig = tlsConfig
 	e.Server.ReadHeaderTimeout = cfg.HTTPServer.ReadHeaderTimeout
 	e.Server.ReadTimeout = cfg.HTTPServer.ReadTimeout
 	e.Server.WriteTimeout = cfg.HTTPServer.WriteTimeout
@@ -90,7 +97,7 @@ func (a *App) Run() error {
 	go func() {
 		a.logger.Infof("Starting HTTP server on %s", a.cfg.HTTPServer.Listen)
 
-		errCh <- a.e.Start(a.cfg.HTTPServer.Listen)
+		errCh <- a.e.StartServer(a.e.Server)
 	}()
 
 	var runErr error

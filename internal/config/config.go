@@ -34,6 +34,7 @@ type LogConfig struct {
 }
 
 type HTTPServerConfig struct {
+	TLS               TLSConfig     `yaml:"tls"`
 	Listen            string        `yaml:"listen"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`
 	WriteTimeout      time.Duration `yaml:"write_timeout"`
@@ -42,6 +43,7 @@ type HTTPServerConfig struct {
 }
 
 type Config struct {
+	Security        SecurityConfig   `yaml:"security"`
 	Database        DatabaseConfig   `yaml:"database"`
 	Log             LogConfig        `yaml:"log"`
 	HTTPServer      HTTPServerConfig `yaml:"http_server"`
@@ -65,6 +67,10 @@ func ReadConfig(paths ...string) (*Config, error) {
 		}
 	}
 
+	// Секреты читаются напрямую из окружения, без подстановки в YAML.
+	config.Security.Auth.ReaderKey = os.Getenv("READER_API_KEY")
+
+	config.Security.Auth.WriterKey = os.Getenv("WRITER_API_KEY")
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -107,11 +113,12 @@ func (cfg Config) validate() error {
 		errs = append(errs, errors.New("log format must be json or console"))
 	}
 
-	return errors.Join(append(errs, cfg.Database.validate())...)
+	return errors.Join(append(errs, cfg.Database.validate(), cfg.Security.Validate(), cfg.HTTPServer.TLS.validate())...)
 }
 
 func defaultConfig() Config {
 	return Config{
+		Security: defaultSecurityConfig(),
 		Database: defaultDatabaseConfig(),
 		Log: LogConfig{
 			Level:  defaultLogLevel,

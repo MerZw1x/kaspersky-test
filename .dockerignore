@@ -12,3 +12,4 @@ build
 coverage
 tools
 **/*_test.go
+certs
